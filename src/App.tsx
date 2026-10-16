@@ -6,12 +6,17 @@ type Book = {
   weight: string; chapters: string; pages: string; price: string; shop: string; id: string
 }
 
-const sheetIdParts = ['1O1K_1Zk2DC3RGEWUEQPVYYk2', 'PDYYkDrDOR3A']
-const sheetId = sheetIdParts.join('')
-const sheetHost = 'https://docs.google.com/'
-const sheetPath = 'spreadsheets/d/'
-const sheetExport = '/export?format=csv&gid=0'
-const CSV_URL = sheetHost + sheetPath + sheetId + sheetExport
+const sheetIdParts = [
+  '1O1K_1Zk2DC3RGEWUEQPVYY',
+  'QV24WhjK2PDYYkDrDOR3A'
+];
+
+const sheetId = sheetIdParts.join('');
+const sheetHost = 'https://docs.google.com/';
+const sheetPath = 'spreadsheets/d/';
+const sheetExport = '/export?format=csv&gid=0';
+
+const CSV_URL = sheetHost + sheetPath + sheetId + sheetExport;
 
 const sampleBooks: Book[] = [
   { series: 'Attack On Titan', volume: '33', thickness: '14.4', height: '191', width: '127', weight: '181.4', chapters: '131 - 134', pages: '192', price: '51.75', shop: 'צומת ספרים', id: 'sample-1' },
