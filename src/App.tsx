@@ -6,17 +6,12 @@ type Book = {
   weight: string; chapters: string; pages: string; price: string; shop: string; id: string
 }
 
-const sheetIdParts = [
-  '1O1K_1Zk2DC3RGEWUEQPVYY',
-  'QV24WhjK2PDYYkDrDOR3A'
-];
-
-const sheetId = sheetIdParts.join('');
-const sheetHost = 'https://docs.google.com/';
-const sheetPath = 'spreadsheets/d/';
-const sheetExport = '/export?format=csv&gid=0';
-
-const CSV_URL = sheetHost + sheetPath + sheetId + sheetExport;
+const sheetIdParts = ['1O1K_1Zk2DC3RGEWUEQPVYY', 'QV24WhjK2PDYYkDrDOR3A']
+const sheetId = sheetIdParts.join('')
+const sheetHost = 'https://docs.google.com/'
+const sheetPath = 'spreadsheets/d/'
+const sheetExport = '/export?format=csv&gid=0'
+const CSV_URL = sheetHost + sheetPath + sheetId + sheetExport
 
 const sampleBooks: Book[] = [
   { series: 'Attack On Titan', volume: '33', thickness: '14.4', height: '191', width: '127', weight: '181.4', chapters: '131 - 134', pages: '192', price: '51.75', shop: 'צומת ספרים', id: 'sample-1' },
@@ -28,21 +23,53 @@ const sampleBooks: Book[] = [
 ]
 
 function parseCSV(text: string): string[][] {
-  const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let insideQuotes = false
+
   for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (ch === '"' && quoted && text[i + 1] === '"') { cell += '"'; i++ }
-    else if (ch === '"') quoted = !quoted
-    else if (ch === ',' && !quoted) { row.push(cell); cell = '' }
-    else if ((ch === '\n' || ch === '\r') && !quoted) {
-      if (ch === '\r' && text[i + 1] === '\n') i++
-      row.push(cell); if (row.some(v => v.trim())) rows.push(row); row = []; cell = ''
-    } else cell += ch
+    const character = text[i]
+    const nextCharacter = text[i + 1]
+
+    // A doubled quote inside a quoted cell represents one literal quote.
+    if (character === '"' && insideQuotes && nextCharacter === '"') {
+      cell += '"'
+      i++
+    } else if (character === '"') {
+      insideQuotes = !insideQuotes
+    } else if (character === ',' && !insideQuotes) {
+      row.push(cell)
+      cell = ''
+    } else if ((character === '\n' || character === '\r') && !insideQuotes) {
+      // Treat Windows CRLF as one line break.
+      if (character === '\r' && nextCharacter === '\n') i++
+
+      row.push(cell)
+      if (row.some(value => value.trim())) rows.push(row)
+
+      row = []
+      cell = ''
+    } else {
+      cell += character
+    }
   }
-  if (cell.length || row.length) { row.push(cell); if (row.some(v => v.trim())) rows.push(row) }
+
+  if (cell.length || row.length) {
+    row.push(cell)
+    if (row.some(value => value.trim())) rows.push(row)
+  }
+
   return rows
 }
-function normaliseHeader(s: string) { return s.toLowerCase().trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') }
+
+function normaliseHeader(header: string): string {
+  return header
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+}
 function booksFromCSV(csv: string): Book[] {
   const rows = parseCSV(csv)
   if (rows.length < 2) throw new Error('The spreadsheet appears to be empty.')
@@ -77,7 +104,16 @@ function booksFromCSV(csv: string): Book[] {
     id: `sheet-${i}-${value(r, columns.series)}-${value(r, columns.volume)}`
   })).filter(b => b.series || b.volume)
 }
-const palette = ['#315b4d', '#8e3f35', '#d0a34d', '#394d73', '#7a6040', '#784b68', '#476b79', '#8b6a37']
+const seriesGradients = [
+  'linear-gradient(155deg, #527c69 0%, #244638 100%)',
+  'linear-gradient(155deg, #bd6b5b 0%, #713129 100%)',
+  'linear-gradient(155deg, #e3c477 0%, #9b7130 100%)',
+  'linear-gradient(155deg, #6b80a9 0%, #303e63 100%)',
+  'linear-gradient(155deg, #ad8b63 0%, #62472f 100%)',
+  'linear-gradient(155deg, #a56d8b 0%, #59354f 100%)',
+  'linear-gradient(155deg, #75a0a8 0%, #345b65 100%)',
+  'linear-gradient(155deg, #b6a16a 0%, #6d5629 100%)',
+]
 function spineLabel(series: string) {
   const known: Record<string, string> = { 'attack on titan': 'AOT', 'attack on titan: before the fall': 'AOT: BTF', 'one piece': 'ONE PIECE', 'berserk deluxe edition': 'BERSERK DELUXE' }
   const key = series.trim().toLowerCase()
@@ -93,13 +129,42 @@ function volumeSortKey(value: string) {
   const match = value.trim().match(/^(\d+(?:\.\d+)?)(?:\s*[-–]\s*\d+(?:\.\d+)?)?$/)
   return match ? Number(match[1]) : Number.POSITIVE_INFINITY
 }
-function bookThicknessMm(book: Book) { return numeric(book.thickness) ?? 0 }
-function money(n: number) { return `₪${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}` }
-function aggregate(items: Book[]) {
-  return { price: items.reduce((sum, b) => sum + (numeric(b.price) ?? 0), 0), weight: items.reduce((sum, b) => sum + (numeric(b.weight) ?? 0), 0), pages: items.reduce((sum, b) => sum + (numeric(b.pages) ?? 0), 0), thickness: items.reduce((sum, b) => sum + bookThicknessMm(b), 0) }
+function bookThicknessMm(book: Book): number {
+  return numeric(book.thickness) ?? 0
 }
-function bookColor(book: Book, i: number) { let h = 0; for (const c of `${book.series}${book.volume}`) h = (h * 31 + c.charCodeAt(0)) | 0; return palette[Math.abs(h + i) % palette.length] }
-function numeric(value: string) { const n = Number(value.replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? n : null }
+
+function money(amount: number): string {
+  return `₪${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+}
+
+function aggregate(items: Book[]) {
+  return {
+    price: items.reduce((total, book) => total + (numeric(book.price) ?? 0), 0),
+    weight: items.reduce((total, book) => total + (numeric(book.weight) ?? 0), 0),
+    pages: items.reduce((total, book) => total + (numeric(book.pages) ?? 0), 0),
+    thickness: items.reduce((total, book) => total + bookThicknessMm(book), 0),
+  }
+}
+
+function seriesGradient(series: string): string {
+  // Use only the normalised series name, never the volume or its position.
+  // That keeps a series' gradient stable when the collection is filtered or sorted.
+  const key = series.trim().toLowerCase()
+  let hash = 0
+
+  for (const character of key) {
+    hash = (hash * 31 + character.charCodeAt(0)) | 0
+  }
+
+  // Convert the hash to an unsigned number before selecting a palette entry.
+  const paletteIndex = (hash >>> 0) % seriesGradients.length
+  return seriesGradients[paletteIndex]
+}
+
+function numeric(value: string): number | null {
+  const number = Number(value.replace(/[^\d.-]/g, ''))
+  return Number.isFinite(number) ? number : null
+}
 
 export default function App() {
   const [books, setBooks] = useState<Book[]>(sampleBooks)
@@ -186,7 +251,7 @@ export default function App() {
   const shelfBooks = useMemo(() => groupedBooks.flatMap(group => group.items), [groupedBooks])
 
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="#top" onClick={() => { setSearch(''); setView('shelves') }}><span className="brand-mark"><LibraryBig size={22}/></span><span><b>THE MANGA MANSION</b><small>PERSONAL MANGA COLLECTION CATALOGUE</small></span></a><nav><button className={view === 'shelves' ? 'nav-active' : ''} onClick={() => setView('shelves')}>My shelves</button><button className={view === 'catalogue' ? 'nav-active' : ''} onClick={() => setView('catalogue')}>Catalogue</button></nav><button className="refresh-button" onClick={refresh} disabled={loading}><RefreshCw size={15} className={loading ? 'spin' : ''}/><span>{loading ? 'Refreshing' : 'Refresh data'}</span></button></header>
+    <header className="topbar"><a className="brand" href="#top" onClick={() => { setSearch(''); setView('shelves') }}><span className="brand-mark"><LibraryBig size={22}/></span><span><b>THE READING ROOM</b><small>PERSONAL LIBRARY CATALOGUE</small></span></a><nav><button className={view === 'shelves' ? 'nav-active' : ''} onClick={() => setView('shelves')}>My shelves</button><button className={view === 'catalogue' ? 'nav-active' : ''} onClick={() => setView('catalogue')}>Catalogue</button></nav><button className="refresh-button" onClick={refresh} disabled={loading}><RefreshCw size={15} className={loading ? 'spin' : ''}/><span>{loading ? 'Refreshing' : 'Refresh data'}</span></button></header>
     <main id="top">
       <section className="hero"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line"/> A HOME FOR EVERY STORY</div><h1>A little world<br/><em>between the covers.</em></h1><p>A personal collection, carefully shelved. Browse the books, discover a series, or look up the details of a favourite volume.</p><div className="hero-actions"><button className="primary-button" onClick={() => { setView('catalogue'); document.getElementById('collection')?.scrollIntoView({behavior:'smooth'}) }}>Explore the collection <ArrowUpRight size={16}/></button><span className="book-count"><BookOpen size={16}/><b>{books.length}</b> entries in the library</span></div></div><div className="hero-art" aria-hidden="true"><div className="lamp-glow"/><div className="art-book art-book-one"><i/><span>THE ART OF STORY</span></div><div className="art-book art-book-two"><i/><span>WANDERER</span></div><div className="art-book art-book-three"><i/><span>ATLAS OF WORLDS</span></div><div className="art-book art-book-four"><i/><span>静かな夜</span></div><div className="art-book art-book-five"><i/><span>COLLECTED TALES</span></div><div className="art-shelf"/><div className="art-plant">✳</div></div><div className="hero-index">EST. WITH LOVE <span>✳</span> ONE BOOK AT A TIME</div></section>
       <section className="collection-section" id="collection"><div className="section-heading"><div><div className="eyebrow">YOUR PRIVATE ARCHIVE</div><h2>{view === 'shelves' ? 'Browse the shelves' : 'The catalogue'}</h2><p className="section-subtitle">{view === 'shelves' ? 'Spines, stories, and the things worth keeping.' : 'Every entry, with the details at your fingertips.'}</p></div><div className="view-switch"><button className={view === 'shelves' ? 'selected' : ''} onClick={() => setView('shelves')}>Shelf view</button><button className={view === 'catalogue' ? 'selected' : ''} onClick={() => setView('catalogue')}>List view</button></div></div>
@@ -200,7 +265,7 @@ export default function App() {
         <div className="search-row"><label className="search-box"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search series, volume, chapters, store…"/><kbd>⌕</kbd></label><button className={`filter-toggle ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters(v => !v)}><SlidersHorizontal size={16}/> Filters</button></div>
         {showFilters && <div className="filter-panel"><label>Purchase location<select value={shopFilter} onChange={e => setShopFilter(e.target.value)}><option value="all">All locations</option>{shops.map(s => <option key={s} value={s}>{s}</option>)}</select></label><label>Min. price<input type="number" min="0" value={minPrice} onChange={e => setMinPrice(e.target.value)} placeholder="Any"/></label><label>Max. price<input type="number" min="0" value={maxPrice} onChange={e => setMaxPrice(e.target.value)} placeholder="Any"/></label><label>Min. chapter<input type="number" min="0" value={minChapters} onChange={e => setMinChapters(e.target.value)} placeholder="Any"/></label><label>Max. chapter<input type="number" min="0" value={maxChapters} onChange={e => setMaxChapters(e.target.value)} placeholder="Any"/></label><button className="clear-filters" onClick={() => {setShopFilter('all');setMinPrice('');setMaxPrice('');setMinChapters('');setMaxChapters('')}}>Clear filters</button></div>}
         <div className="status-line"><span><span className={`status-dot ${source === 'sheet' ? 'live' : ''}`}/>{notice}</span><span className="result-count">{filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}</span></div>
-        {filtered.length === 0 ? <div className="empty-state"><BookOpen size={32}/><h3>No books found</h3><p>Try a different search or clear some filters.</p><button onClick={() => {setSearch('');setShopFilter('all');setMinPrice('');setMaxPrice('');setMinChapters('');setMaxChapters('')}}>Reset search</button></div> : view === 'shelves' ? <div className="shelf-groups" aria-label="Books arranged across shared shelves">{shelfBooks.map((book, i) => { const previous = shelfBooks[i - 1]; const heightMm = numeric(book.height) ?? 191; const pages = numeric(book.pages) ?? 200; const spineHeight = Math.min(198, Math.max(112, heightMm * 0.68)); const spineWidth = Math.min(76, Math.max(36, 24 + pages * 0.045)); return <button key={book.id} className={`spine-button ${!previous || previous.series !== book.series ? 'new-series' : ''}`} style={{'--book-width': `${spineWidth}px`} as React.CSSProperties} title={`${book.series} — ${book.volume}`} aria-label={`${book.series}, volume ${book.volume}`} onClick={() => setSelected(book)}><div className="spine" style={{'--spine-color':bookColor(book,i), '--spine-height':`${spineHeight}px`} as React.CSSProperties}><span className="spine-top">✳</span><span className="spine-title" title={book.series}>{spineLabel(book.series)}</span><span className="spine-volume">{book.volume}</span></div></button> })}</div> : <>
+        {filtered.length === 0 ? <div className="empty-state"><BookOpen size={32}/><h3>No books found</h3><p>Try a different search or clear some filters.</p><button onClick={() => {setSearch('');setShopFilter('all');setMinPrice('');setMaxPrice('');setMinChapters('');setMaxChapters('')}}>Reset search</button></div> : view === 'shelves' ? <div className="shelf-groups" aria-label="Books arranged across shared shelves">{shelfBooks.map((book, i) => { const previous = shelfBooks[i - 1]; const heightMm = numeric(book.height) ?? 191; const pages = numeric(book.pages) ?? 200; const spineHeight = Math.min(198, Math.max(112, heightMm * 0.68)); const spineWidth = Math.min(76, Math.max(36, 24 + pages * 0.045)); return <button key={book.id} className={`spine-button ${!previous || previous.series !== book.series ? 'new-series' : ''}`} style={{'--book-width': `${spineWidth}px`} as React.CSSProperties} title={`${book.series} — ${book.volume}`} aria-label={`${book.series}, volume ${book.volume}`} onClick={() => setSelected(book)}><div className="spine" style={{'--spine-color':seriesGradient(book.series), '--spine-height':`${spineHeight}px`} as React.CSSProperties}><span className="spine-top">✳</span><span className="spine-title" title={book.series}>{spineLabel(book.series)}</span><span className="spine-volume">{book.volume}</span></div></button> })}</div> : <>
           <div className="catalogue-sort">
             <label>Sort series
               <select value={catalogueSort} onChange={e => setCatalogueSort(e.target.value as typeof catalogueSort)}>
@@ -215,12 +280,12 @@ export default function App() {
               </select>
             </label>
           </div>
-          <div className="catalogue-groups">{catalogueGroups.map((group, gi) => { const totals = aggregate(group.items); const isOpen = expandedSeries.includes(group.series); return <section className="catalogue-series" key={group.series}><button className="catalogue-series-heading" onClick={() => setExpandedSeries(old => isOpen ? old.filter(x => x !== group.series) : [...old, group.series])} aria-expanded={isOpen}><span className="series-heading-main"><span className="table-book-dot" style={{background:bookColor(group.items[0],gi)}}/><span><b>{group.series}</b><small>{group.items.length} {group.items.length === 1 ? 'volume / set' : 'volumes / sets'}</small></span></span><span className="series-heading-totals"><b>{money(totals.price)}</b><small>{totals.weight.toLocaleString(undefined, { maximumFractionDigits: 1 })} g · {totals.pages.toLocaleString()} pages</small></span><span className={`group-chevron ${isOpen ? 'open' : ''}`}>⌄</span></button>{isOpen && <div className="catalogue-table-wrap"><table className="catalogue-table"><thead><tr><th>Volume / edition</th><th>Chapters</th><th>Pages</th><th>Price</th><th>Purchased at</th><th/></tr></thead><tbody>{group.items.map((b,i)=><tr key={b.id} onClick={() => setSelected(b)}><td><b>{b.volume}</b></td><td>{b.chapters || '—'}</td><td>{b.pages || '—'}</td><td>{b.price ? money(numeric(b.price) ?? 0) : '—'}</td><td>{b.shop || '—'}</td><td><ArrowUpRight size={16}/></td></tr>)}</tbody></table><div className="series-footnote">Combined thickness: {(totals.thickness / 1000).toFixed(4)} m</div></div>}</section> })}</div>
+          <div className="catalogue-groups">{catalogueGroups.map((group, gi) => { const totals = aggregate(group.items); const isOpen = expandedSeries.includes(group.series); return <section className="catalogue-series" key={group.series}><button className="catalogue-series-heading" onClick={() => setExpandedSeries(old => isOpen ? old.filter(x => x !== group.series) : [...old, group.series])} aria-expanded={isOpen}><span className="series-heading-main"><span className="table-book-dot" style={{background:seriesGradient(group.series)}}/><span><b>{group.series}</b><small>{group.items.length} {group.items.length === 1 ? 'volume / set' : 'volumes / sets'}</small></span></span><span className="series-heading-totals"><b>{money(totals.price)}</b><small>{totals.weight.toLocaleString(undefined, { maximumFractionDigits: 1 })} g · {totals.pages.toLocaleString()} pages</small></span><span className={`group-chevron ${isOpen ? 'open' : ''}`}>⌄</span></button>{isOpen && <div className="catalogue-table-wrap"><table className="catalogue-table"><thead><tr><th>Volume / edition</th><th>Chapters</th><th>Pages</th><th>Price</th><th>Purchased at</th><th/></tr></thead><tbody>{group.items.map((b,i)=><tr key={b.id} onClick={() => setSelected(b)}><td><b>{b.volume}</b></td><td>{b.chapters || '—'}</td><td>{b.pages || '—'}</td><td>{b.price ? money(numeric(b.price) ?? 0) : '—'}</td><td>{b.shop || '—'}</td><td><ArrowUpRight size={16}/></td></tr>)}</tbody></table><div className="series-footnote">Combined thickness: {(totals.thickness / 1000).toFixed(4)} m</div></div>}</section> })}</div>
         </>}
       </section>
-      <footer><div className="footer-brand"><LibraryBig size={19}/> THE MANGA MANSION</div><p>A small archive for a growing collection.</p><span>MADE FOR THE LOVE OF BOOKS <span className="footer-star">✳</span></span></footer>
+      <footer><div className="footer-brand"><LibraryBig size={19}/> THE READING ROOM</div><p>A small archive for a growing collection.</p><span>MADE FOR THE LOVE OF BOOKS <span className="footer-star">✳</span></span></footer>
     </main>
-    {selected && <div className="modal-backdrop" role="presentation" onMouseDown={e => {if(e.target === e.currentTarget) setSelected(null)}}><section className="detail-modal" role="dialog" aria-modal="true" aria-label={`${selected.series} details`}><button className="close-modal" onClick={() => setSelected(null)} aria-label="Close details"><X size={20}/></button><div className="detail-top"><div className="detail-spine" style={{background:bookColor(selected, 1)}}><span>✳</span><b>{selected.series}</b><small>{selected.volume}</small></div><div className="detail-title"><div className="eyebrow">COLLECTION DETAILS</div><h2>{selected.series}</h2><p>{selected.volume.includes('-') ? `Collection / volumes ${selected.volume}` : `Volume ${selected.volume}`}</p><div className="detail-price">{selected.price ? `₪${selected.price}` : 'Price not listed'}</div></div></div><div className="detail-grid"><Detail label="Chapters" value={selected.chapters}/><Detail label="Page count" value={selected.pages}/><Detail label="Width" value={selected.width} unit="mm"/><Detail label="Height" value={selected.height} unit="mm"/><Detail label="Thickness" value={selected.thickness} unit="mm"/><Detail label="Weight" value={selected.weight} unit="g"/><Detail label="Purchased at" value={selected.shop}/><Detail label="Record type" value={selected.volume.includes('-') ? 'Multi-volume set' : 'Single volume'}/></div><div className="detail-note"><BookOpen size={16}/><span>Measurements are shown as recorded in the collection spreadsheet. Book height and width describe the cover; thickness measures the spine. Shelf illustrations are scaled for appearance.</span></div></section></div>}
+    {selected && <div className="modal-backdrop" role="presentation" onMouseDown={e => {if(e.target === e.currentTarget) setSelected(null)}}><section className="detail-modal" role="dialog" aria-modal="true" aria-label={`${selected.series} details`}><button className="close-modal" onClick={() => setSelected(null)} aria-label="Close details"><X size={20}/></button><div className="detail-top"><div className="detail-spine" style={{background:seriesGradient(selected.series)}}><span>✳</span><b>{selected.series}</b><small>{selected.volume}</small></div><div className="detail-title"><div className="eyebrow">COLLECTION DETAILS</div><h2>{selected.series}</h2><p>{selected.volume.includes('-') ? `Collection / volumes ${selected.volume}` : `Volume ${selected.volume}`}</p><div className="detail-price">{selected.price ? `₪${selected.price}` : 'Price not listed'}</div></div></div><div className="detail-grid"><Detail label="Chapters" value={selected.chapters}/><Detail label="Page count" value={selected.pages}/><Detail label="Width" value={selected.width} unit="mm"/><Detail label="Height" value={selected.height} unit="mm"/><Detail label="Thickness" value={selected.thickness} unit="mm"/><Detail label="Weight" value={selected.weight} unit="g"/><Detail label="Purchased at" value={selected.shop}/><Detail label="Record type" value={selected.volume.includes('-') ? 'Multi-volume set' : 'Single volume'}/></div><div className="detail-note"><BookOpen size={16}/><span>Measurements are shown as recorded in the collection spreadsheet. Book height and width describe the cover; thickness measures the spine. Shelf illustrations are scaled for appearance.</span></div></section></div>}
   </div>
 }
 function Detail({label,value,unit}: {label:string;value:string;unit?:string}) { return <div className="detail-cell"><span>{label}</span><b>{value ? `${value}${unit ? ` ${unit}` : ''}` : '—'}</b></div> }
